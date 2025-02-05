@@ -1,0 +1,2420 @@
+📂 Resumen del Proyecto en: C:\Users\ksante\dev\wordsearch
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\.eslint.config.js
+----------------------------------
+// @ts-check
+const prettierPlugin = require('eslint-plugin-prettier');
+const typescriptParser = require('@typescript-eslint/parser');
+const tsPlugin = require('@typescript-eslint/eslint-plugin');
+
+const eslintPluginPrettierRecommended = require('eslint-plugin-prettier/recommended');
+
+module.exports = [
+    {
+        ignores: ['.cache/', '.git/', '.github/', 'node_modules/'],
+    },
+    {
+        files: ['**/*.ts'],
+        languageOptions: {
+            parser: typescriptParser,
+            parserOptions: {
+                project: ['./tsconfig.json', './tsconfig.app.json', './tsconfig.spec.json'],
+            },
+        },
+        plugins: {
+            '@typescript-eslint': tsPlugin,
+            prettier: prettierPlugin,
+        },
+        rules: {
+            ...tsPlugin.configs.recommended.rules,
+            ...prettierPlugin.configs?.rules,
+            'prettier/prettier': 'error',
+            'import/order': 'off',
+            '@typescript-eslint/no-explicit-any': ['off'],
+            '@typescript-eslint/member-ordering': 0,
+            '@typescript-eslint/naming-convention': 0,
+            '@angular-eslint/no-host-metadata-property': 'off',
+            '@angular-eslint/no-output-on-prefix': 'off',
+            '@typescript-eslint/ban-types': 'off',
+            '@typescript-eslint/no-inferrable-types': 'off',
+        },
+    },
+
+    eslintPluginPrettierRecommended,
+];
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\api\nodemon.json
+----------------------------------
+{
+  "watch": ["src"],
+  "ext": "ts",
+  "exec": "ts-node ./src/index.ts",
+  "ignore": ["src/**/*.test.ts"]
+}
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\api\package.json
+----------------------------------
+{
+  "name": "@wordsearch/api",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "nodemon",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@wordsearch/config": "workspace:*",
+    "@wordsearch/types": "workspace:*",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.0",
+    "nodemon": "^3.0.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.0"
+  }
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\api\src\data\wordlists.json
+----------------------------------
+{
+  "animales": {
+    "easy": ["PERRO", "GATO", "PEZ"],
+    "medium": ["ELEFANTE", "JIRAFA", "COCODRILO"],
+    "hard": ["HIPOPÓTAMO", "CAMALEÓN", "CEBRA"],
+    "expert": ["ORNITORRINCO", "HIPOPOTOMONSTROS"]
+  },
+  "paises": {
+    "easy": ["ESPAÑA", "PERÚ", "CHILE"],
+    "medium": ["ARGENTINA", "COLOMBIA", "URUGUAY"],
+    "hard": ["REPÚBLICA DOMINICANA", "COSTA RICA", "PARAGUAY"],
+    "expert": ["REPÚBLICA DE COREA", "REPÚBLICA POPULAR CHINA"]
+  },
+  "frutas": {
+    "easy": ["MANZANA", "PERA", "UVA"],
+    "medium": ["SANDÍA", "MELÓN", "PIÑA"],
+    "hard": ["FRAMBUESA", "ARÁNDANO", "MANGO"],
+    "expert": ["GUAYABA", "MARACUYÁ", "PITAHAYA"]
+  }
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\api\src\index.ts
+----------------------------------
+import express from "express";
+import http from "http";
+import {Server} from "socket.io";
+import cors from "cors";
+import {initializeSocket} from "./socket";
+import {router} from "./routes/game.routes";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const app = express();
+const server = http.createServer(app);
+
+// Configuración básica
+app.use(cors());
+app.use(express.json());
+
+// Rutas REST
+app.use("/api/game", router);
+
+// Configuración de Socket.IO: se usa el path '/api/socket' para que coincida con el cliente.
+const io = new Server(server, {
+    cors: {
+        origin: process.env.NODE_ENV === 'production'
+            ? process.env.CLIENT_URL
+            : "http://localhost:3000",
+        methods: ["GET", "POST"]
+    },
+    path: "/api/socket"
+});
+
+initializeSocket(io);
+
+// Iniciar el servidor
+const PORT = process.env.API_PORT || 3001;
+server.listen(PORT, () => {
+    console.log(`🛡️  API running on port ${PORT}`);
+    console.log(`🔗 http://localhost:${PORT}`);
+});
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\api\src\routes\game.routes.ts
+----------------------------------
+// apps/api/src/routes/game.routes.ts
+import { Router } from 'express';
+import { activeRooms } from '../socket';
+import { generateGrid } from '../utils/game.utils';
+import { Difficulty } from '@wordsearch/types';
+
+const wordlists = require('../data/wordlists.json') as Record<string, Record<Difficulty, string[]>>;
+
+const router: Router = Router();
+
+// Endpoint para listar salas en espera
+router.get('/rooms', (req, res) => {
+  const rooms = Array.from(activeRooms.values())
+    .filter((room) => room.status === 'waiting')
+    .map((room) => ({
+      id: room.id,
+      players: room.players.length,
+      difficulty: room.difficulty,
+      topic: room.topic, // Include topic in room list
+    }));
+
+  res.json(rooms);
+});
+
+// Endpoint para obtener información de una sala en particular
+router.get('/rooms/:id', (req, res) => {
+  const room = activeRooms.get(req.params.id);
+  room ? res.json(room) : res.status(404).send('Room not found');
+});
+
+// Endpoint para generar el grid según la dificultad
+router.post('/generate-grid', (req, res) => {
+  const { difficulty, topic } = req.body as { difficulty: Difficulty; topic: string };
+
+  const rawWordlists = require('../data/wordlists.json');
+
+  const wordlists = rawWordlists as unknown as Record<string, Record<Difficulty, string[]>>;
+
+  if (!difficulty) {
+    return res.status(400).json({ error: "Se requiere 'difficulty'" });
+  }
+
+  if (!topic) {
+    return res.status(400).json({ error: "Se requiere 'topic'" });
+  }
+
+  if (!(topic in wordlists)) {
+    return res.status(404).json({ error: 'Tema no encontrado' });
+  }
+
+  if (!(difficulty in wordlists[topic])) {
+    return res.status(404).json({ error: 'Dificultad no encontrada en el tema' });
+  }
+
+  if (!wordlists[topic][difficulty]) {
+    return res.status(404).json({ error: 'No se encontraron palabras para el tema y dificultad' });
+  }
+
+  const words = wordlists[topic][difficulty];
+
+  const grid = generateGrid(difficulty, words);
+
+  console.info(`Generated grid for difficulty ${difficulty}`);
+
+  res.json(grid);
+});
+
+// Nuevo endpoint para obtener la lista de palabras a partir de un tema y dificultad
+router.post('/words', (req, res) => {
+  const { topic, difficulty } = req.body as { topic: string; difficulty: Difficulty };
+
+  if (!topic || !difficulty) {
+    return res.status(400).json({ error: "Se requiere 'topic' y 'difficulty'" });
+  }
+
+  // Verificar que el tema exista en el JSON
+  if (!(topic in wordlists)) {
+    return res.status(404).json({ error: 'Tema no encontrado' });
+  }
+
+  const topicData = wordlists[topic] as Record<Difficulty, string[]>;
+
+  // Verificar que exista la dificultad en el tema
+  if (!(difficulty in topicData)) {
+    return res.status(404).json({ error: 'Dificultad no encontrada en el tema' });
+  }
+
+  const words = topicData[difficulty] as string[];
+
+  return res.json({ words });
+});
+
+// Endpoint para obtener la lista de temas disponibles
+router.get('/topics', (req, res) => {
+  const topics = Object.keys(wordlists);
+  res.json({ topics });
+});
+
+export { router };
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\api\src\socket.ts
+----------------------------------
+import { Server } from 'socket.io';
+import { generateGrid, generateRoomId } from './utils/game.utils';
+import { Difficulty, GameRoom, Player } from '@wordsearch/types';
+import rawWordlists from './data/wordlists.json';
+
+const wordlists = rawWordlists as unknown as Record<string, Record<Difficulty, string[]>>;
+
+export const activeRooms = new Map<string, GameRoom>();
+
+export const initializeSocket = (io: Server) => {
+  io.on('connection', (socket) => {
+    console.log('🔌 New connection:', socket.id);
+
+    // Evento para crear sala
+    socket.on(
+      'create-room',
+      (
+        data: { difficulty: Difficulty; grid?: string[][]; roomId?: string; topic: string; words: string[] },
+        callback?: (room: GameRoom) => void
+      ) => {
+        // Si se envía un roomId, se utiliza; de lo contrario, se genera uno.
+        const roomId = data.roomId || generateRoomId();
+        // Se genera el grid o se usa el enviado
+        const grid = data.grid || generateGrid(data.difficulty, data.words);
+        // Tema: se utiliza el enviado o un valor por defecto (por ejemplo, "animales")
+        const topic = data.topic || 'animales';
+
+        const newRoom: GameRoom = {
+          id: roomId,
+          players: [],
+          difficulty: data.difficulty,
+          grid,
+          words: data.words,
+          topic: topic,
+          status: 'waiting',
+        };
+
+        activeRooms.set(roomId, newRoom);
+
+        if (callback && typeof callback === 'function') {
+          callback(newRoom);
+        }
+
+        console.log(`🚪 Room created: ${roomId}`);
+      }
+    );
+
+    // Evento para unirse a una sala
+    socket.on('join-room', (roomId: string, playerName: string, callback: (room: GameRoom | null) => void) => {
+      // ✅ Corrected callback type
+      console.log('Received join-room event:', { roomId, playerName, callback }); // ✅ Log received data and callback
+
+      const room = activeRooms.get(roomId);
+
+      if (!room) {
+        console.log('Room not found. Calling callback with null:', callback); // ✅ Log before callback call
+        return callback(null);
+      }
+      if (room.players.length >= 4) {
+        console.log('Room full. Calling callback with null:', callback); // ✅ Log before callback call
+        return callback(null);
+      }
+
+      const newPlayer: Player = {
+        id: socket.id,
+        name: playerName,
+        score: 0,
+        color: getPlayerColor(room.players.length),
+      };
+
+      room.players.push(newPlayer);
+      socket.join(roomId);
+      io.to(roomId).emit('room-update', room);
+      console.log('Join successful. Calling callback with room data:', callback, room); // ✅ Log before callback call
+      callback(room);
+    });
+
+    // Manejar desconexión
+    socket.on('disconnect', () => {
+      console.log('🚫 Connection lost:', socket.id);
+      activeRooms.forEach((room, roomId) => {
+        room.players = room.players.filter((p) => p.id !== socket.id);
+        if (room.players.length === 0) {
+          activeRooms.delete(roomId);
+        }
+      });
+    });
+  });
+};
+
+const getPlayerColor = (index: number): string => {
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'];
+  return colors[index % colors.length];
+};
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\api\src\utils\game.utils.ts
+----------------------------------
+import { Difficulty } from '@wordsearch/types';
+
+/**
+ * Genera un identificador único para una sala (4 caracteres en mayúsculas).
+ */
+export function generateRoomId(): string {
+  return Math.random().toString(36).substring(2, 6).toUpperCase();
+}
+
+/**
+ * Genera un grid (matriz de strings) según la dificultad.
+ */
+export function generateGrid(difficulty: Difficulty, words: string[]): string[][] {
+  // ✅ Added words parameter
+  const sizes: Record<Difficulty, number> = {
+    easy: 10,
+    medium: 12,
+    hard: 15,
+    expert: 18,
+    numbers: 10,
+  };
+
+  const size = sizes[difficulty];
+  const gridSize = size * size;
+  const grid: string[][] = Array.from({ length: size }, () => Array(size).fill(''));
+  const placedWords: string[] = [];
+
+  // Simple word placement (you'll likely need a more advanced algorithm)
+  words.forEach((word) => {
+    let placed = false;
+    for (let attempts = 0; attempts < 100; attempts++) {
+      // Limit attempts to avoid infinite loops
+      const direction = Math.random() < 0.5 ? 'horizontal' : 'vertical';
+      const rowStart = Math.floor(Math.random() * size);
+      const colStart = Math.floor(Math.random() * size);
+
+      if (direction === 'horizontal' && colStart + word.length <= size) {
+        let canPlace = true;
+        for (let i = 0; i < word.length; i++) {
+          if (grid[rowStart][colStart + i] !== '') {
+            // Basic overlap check
+            canPlace = false;
+            break;
+          }
+        }
+        if (canPlace) {
+          for (let i = 0; i < word.length; i++) {
+            grid[rowStart][colStart + i] = word[i];
+          }
+          placedWords.push(word);
+          placed = true;
+          break;
+        }
+      } else if (direction === 'vertical' && rowStart + word.length <= size) {
+        let canPlace = true;
+        for (let i = 0; i < word.length; i++) {
+          if (grid[rowStart + i][colStart] !== '') {
+            // Basic overlap check
+            canPlace = false;
+            break;
+          }
+        }
+        if (canPlace) {
+          for (let i = 0; i < word.length; i++) {
+            grid[rowStart + i][colStart] = word[i];
+          }
+          placedWords.push(word);
+          placed = true;
+          break;
+        }
+      }
+    }
+    if (!placed) {
+      console.warn(`Could not place word: ${word}`); // Log if word placement fails
+    }
+  });
+
+  // Fill remaining grid spaces with random letters
+  for (let row = 0; row < size; row++) {
+    for (let col = 0; col < size; col++) {
+      if (grid[row][col] === '') {
+        grid[row][col] = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+      }
+    }
+  }
+
+  return grid;
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\api\tsconfig.json
+----------------------------------
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "declaration": true,
+    "rootDir": ".",
+    "target": "esnext",
+    "module": "CommonJS"
+  },
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\next-env.d.ts
+----------------------------------
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\next.config.ts
+----------------------------------
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+};
+
+export default nextConfig;
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\package.json
+----------------------------------
+{
+  "name": "@wordsearch/web",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.66.0",
+    "@wordsearch/config": "workspace:*",
+    "@wordsearch/types": "workspace:*",
+    "axios": "^1.7.9",
+    "framer-motion": "^12.0.11",
+    "next": "^15.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "socket.io-client": "^4.7.2",
+    "tailwindcss": "^4.0.3",
+    "postcss": "^8.5.1",
+    "autoprefixer": "^10.4.2",
+    "@tailwindcss/postcss": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.8"
+  }
+}
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\error.tsx
+----------------------------------
+'use client';
+
+import React, { useEffect } from 'react';
+
+interface ErrorProps {
+  error: Error;
+  reset: () => void;
+}
+
+export default function Error({ error, reset }: ErrorProps) {
+  // Puedes imprimir el error en consola para debugging
+  useEffect(() => {
+    console.error('Error boundary capturó un error:', error);
+  }, [error]);
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-red-100 p-8">
+      <h1 className="text-3xl font-bold text-red-700">¡Algo salió mal!</h1>
+      <p className="mt-4 text-lg text-gray-800">{error.message || 'Ha ocurrido un error inesperado.'}</p>
+      <button onClick={reset} className="mt-6 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700">
+        Intentar nuevamente
+      </button>
+    </div>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\context\game-context.tsx
+----------------------------------
+'use client';
+
+import React, { createContext, Dispatch, PropsWithChildren, useContext, useReducer } from 'react';
+import { gameReducer, initialGameState } from './gameReducer';
+import { createGameActions, type GameActions } from './gameActions'; // ✅ Import createGameActions
+import { useRouter } from 'next/navigation';
+import { GameAction, GameContextState } from '../../types/types';
+import { useWebSocketService, WebSocketService } from '../../hooks/useWebsocketService'; // ✅ Import useRouter
+
+const GameContext = createContext<{
+  state: GameContextState;
+  dispatch: Dispatch<GameAction>;
+  actions: GameActions;
+  webSocketService: WebSocketService;
+}>({
+  state: initialGameState,
+  dispatch: () => undefined,
+  actions: {} as GameActions,
+  webSocketService: {} as WebSocketService,
+});
+
+const useGameContext = () => useContext(GameContext);
+
+const GameProvider: React.FC<PropsWithChildren> = ({ children }) => {
+  const [state, dispatch] = useReducer(gameReducer, initialGameState);
+  const webSocketService = useWebSocketService();
+  const router = useRouter();
+  const actions = createGameActions(dispatch, webSocketService, router);
+
+  return <GameContext.Provider value={{ state, dispatch, actions, webSocketService }}>{children}</GameContext.Provider>;
+};
+
+export { GameContext, GameProvider, useGameContext };
+export type { WebSocketService };
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\context\gameActions.ts
+----------------------------------
+'use client';
+
+import { Dispatch, useCallback } from 'react';
+import { Difficulty } from '@wordsearch/types';
+import { WebSocketService } from './game-context';
+import { createRoomFn, joinRoomFn } from './gameApiService';
+import { GameAction, RoomID } from '../../types/types';
+import { AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime';
+
+// Define GameActions type here (moved from game-context.tsx)
+type GameActions = {
+  createRoom: (difficulty: Difficulty, topic: string) => Promise<void>;
+  joinRoom: (roomId: RoomID, playerName: string) => Promise<void>;
+  selectCells: (cells: [number, number][]) => void;
+  submitSelection: () => void;
+};
+
+// ✅ useGameActions is now a regular function, NOT a Hook
+export const createGameActions = (
+  // Renamed to createGameActions (not useGameActions)
+  dispatch: Dispatch<GameAction>,
+  webSocketService: WebSocketService,
+  router: AppRouterInstance // ✅ Pass router as a regular argument
+): GameActions => {
+  return {
+    // ✅ Directly return the actions object (no useMemo needed anymore)
+    createRoom: async (difficulty: Difficulty, topic: string) => {
+      try {
+        const room = await createRoomFn(difficulty, topic, webSocketService.emit);
+        if (room) {
+          dispatch({ type: 'INITIALIZE', payload: room });
+          router.push(`/game/lobby/${room.id}`);
+        } else {
+          dispatch({ type: 'SET_ERROR', payload: 'Failed to create room' });
+        }
+      } catch (error) {
+        console.error('Error creating room:', error);
+        dispatch({ type: 'SET_ERROR', payload: 'Error creating room' });
+      }
+    },
+
+    joinRoom: async (roomId: RoomID, playerName: string) => {
+      console.log('Calling joinRoom action. RoomId:', roomId, 'PlayerName:', playerName); // ✅ Log action call
+      try {
+        const room = await joinRoomFn(roomId, playerName, webSocketService.emit);
+        if (room) {
+          dispatch({ type: 'INITIALIZE', payload: room });
+          router.push(`/game/play/${roomId}`);
+        } else {
+          dispatch({ type: 'SET_ERROR', payload: 'Failed to join room or room not found' });
+        }
+      } catch (error) {
+        console.error('Error joining room:', error);
+        dispatch({ type: 'SET_ERROR', payload: 'Error joining room' });
+      }
+    },
+
+    selectCells: useCallback(
+      (cells: [number, number][]) => {
+        dispatch({ type: 'SELECT_CELLS', payload: cells });
+      },
+      [dispatch]
+    ),
+
+    submitSelection: useCallback(() => {
+      dispatch({ type: 'RESET_SELECTION' });
+    }, [dispatch]),
+  };
+};
+
+export type { GameActions };
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\context\gameApiService.ts
+----------------------------------
+import axios from 'axios';
+import { Difficulty, GameRoom } from '@wordsearch/types';
+import { API_URL } from '@wordsearch/config';
+import type { WebSocketService } from './game-context';
+import { RoomID } from '../../types/types';
+
+export const generateRoomId = (): RoomID => {
+  return Math.random().toString(36).substring(2, 6).toUpperCase();
+};
+
+export const createRoomFn = async (
+  difficulty: Difficulty,
+  topic: string,
+  emit: WebSocketService['emit']
+): Promise<GameRoom> => {
+  const roomId = generateRoomId();
+  console.log('Creating room', roomId);
+
+  const { data: grid } = await axios.post<string[][]>(`${API_URL}/api/game/generate-grid`, { difficulty, topic });
+
+  return new Promise((resolve, reject) => {
+    interface CreateRoomData {
+      roomId: string;
+      difficulty: Difficulty;
+      grid: string[][];
+      topic: string;
+    }
+    const createRoomPayload: CreateRoomData = { roomId, difficulty, grid, topic };
+
+    emit<CreateRoomData>('create-room', createRoomPayload, (room: GameRoom) => {
+      if (room) {
+        resolve(room);
+      } else {
+        reject(new Error('Failed to create room'));
+      }
+    });
+  });
+};
+
+export const joinRoomFn = async (
+  roomId: RoomID,
+  playerName: string,
+  emit: WebSocketService['emit']
+): Promise<GameRoom | null> => {
+  console.log('Calling joinRoomFn. RoomId:', roomId, 'PlayerName:', playerName, 'Emit Function:', emit); // ✅ Log function call and emit function
+  return new Promise((resolve, reject) => {
+    // Define type for join-room data
+    interface JoinRoomData {
+      roomId: string;
+      playerName: string;
+    }
+    const joinRoomPayload: JoinRoomData = { roomId, playerName };
+
+    emit<JoinRoomData>('join-room', joinRoomPayload, (room: GameRoom | null) => {
+      if (room) {
+        resolve(room);
+      } else {
+        reject(null);
+      }
+    });
+  });
+};
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\context\gameReducer.ts
+----------------------------------
+import { Cell, GameAction, GameContextState } from '../../types/types';
+
+export const initialGameState: GameContextState = {
+  id: '',
+  players: [],
+  grid: [],
+  foundWords: [],
+  difficulty: 'easy',
+  words: [],
+  topic: 'animales',
+  status: 'waiting',
+  selectedCells: [],
+  error: null,
+};
+
+export const gameReducer = (state: GameContextState, action: GameAction): GameContextState => {
+  switch (action.type) {
+    case 'INITIALIZE':
+      return {
+        ...state,
+        id: action.payload.id,
+        players: action.payload.players,
+        difficulty: action.payload.difficulty,
+        words: action.payload.words,
+        topic: action.payload.topic,
+        status: action.payload.status,
+        grid: action.payload.grid.map((row, y) =>
+          row.map(
+            (letter, x) =>
+              ({
+                letter,
+                x,
+                y,
+                foundBy: null,
+              }) as Cell
+          )
+        ),
+      };
+    case 'UPDATE_STATE':
+      return { ...state, ...action.payload };
+    case 'SELECT_CELLS':
+      return { ...state, selectedCells: action.payload };
+    case 'RESET_SELECTION':
+      return { ...state, selectedCells: [] };
+    case 'ADD_FOUND_WORD':
+      return { ...state, foundWords: [...state.foundWords, action.payload] };
+    case 'SET_ERROR':
+      return { ...state, error: action.payload };
+    default:
+      return state;
+  }
+};
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\create\components\DifficultySelector.tsx
+----------------------------------
+// apps/web/src/app/game/create/components/DifficultySelector.tsx
+import React from 'react';
+import { motion } from 'framer-motion';
+import { Difficulty } from '@wordsearch/types';
+
+const difficulties: {
+  name: Difficulty;
+  color: string;
+  description: string;
+}[] = [
+  {
+    name: 'easy',
+    color: 'bg-green-500 hover:bg-green-600',
+    description: '10x10 grid - Palabras simples',
+  },
+  {
+    name: 'medium',
+    color: 'bg-yellow-500 hover:bg-yellow-600',
+    description: '12x12 grid - Términos técnicos',
+  },
+  {
+    name: 'hard',
+    color: 'bg-red-500 hover:bg-red-600',
+    description: '15x15 grid - Vocabulario avanzado',
+  },
+  {
+    name: 'expert',
+    color: 'bg-purple-500 hover:bg-purple-600',
+    description: '18x18 grid - Desafío extremo',
+  },
+  {
+    name: 'numbers',
+    color: 'bg-blue-500 hover:bg-blue-600',
+    description: '10x10 grid - Combinaciones numéricas',
+  },
+];
+
+interface DifficultySelectorProps {
+  onCreate: (difficulty: Difficulty) => void;
+}
+
+export default function DifficultySelector({ onCreate }: DifficultySelectorProps) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {difficulties.map((difficulty, index) => (
+        <motion.div
+          key={difficulty.name}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.1 }}
+        >
+          <button
+            onClick={() => onCreate(difficulty.name)} // ✅ Just pass difficulty to onCreate
+            className={`${difficulty.color} text-white p-6 rounded-lg shadow-md
+              transition-all duration-300 w-full text-left flex flex-col
+              justify-between h-32`}
+          >
+            <h3 className="text-xl font-bold">{difficulty.name}</h3>
+            <p className="text-sm opacity-90">{difficulty.description}</p>
+            <div className="flex justify-end">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6 text-white/80"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </div>
+          </button>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\create\components\TopicSelector.tsx
+----------------------------------
+import React from 'react';
+import { motion } from 'framer-motion';
+
+interface TopicSelectorProps {
+  topics: string[];
+  onTopicSelect: (topic: string) => void;
+}
+
+export default function TopicSelector({ topics, onTopicSelect }: TopicSelectorProps) {
+  return (
+    <div>
+      <h2 className="text-xl font-semibold text-gray-700 mb-4 text-center">Selecciona un tema</h2>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {topics.map((topic) => (
+          <motion.button
+            key={topic}
+            onClick={() => onTopicSelect(topic)}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="px-4 py-2 rounded-lg font-semibold shadow-md border bg-white text-gray-800 hover:bg-blue-100"
+          >
+            {topic}
+          </motion.button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\create\page.tsx
+----------------------------------
+'use client';
+
+import React, { useState } from 'react';
+import { Difficulty } from '@wordsearch/types';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import DifficultySelector from './components/DifficultySelector';
+import TopicSelector from './components/TopicSelector';
+import { useTopics } from '../../hooks/useTopics';
+import { useGameContext } from '../context/game-context';
+
+// import { createRoomAction } from './actions'; // ❌ Removed import of createRoomAction - no longer needed
+
+enum CreationStep {
+  TOPIC_SELECT,
+  DIFFICULTY_SELECT,
+  CREATING,
+}
+
+export default function CreateGamePage() {
+  const [currentStep, setCurrentStep] = useState<CreationStep>(CreationStep.TOPIC_SELECT);
+  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
+  const { actions } = useGameContext();
+  const router = useRouter();
+  const { data: topics, isLoading: isLoadingTopics, isError: isErrorTopics, error: errorTopics } = useTopics();
+
+  const handleTopicSelect = (topic: string) => {
+    setSelectedTopic(topic);
+    setCurrentStep(CreationStep.DIFFICULTY_SELECT);
+  };
+
+  const handleDifficultySelect = (difficulty: Difficulty) => {
+    setSelectedDifficulty(difficulty);
+    setCurrentStep(CreationStep.CREATING);
+    handleCreateRoom(difficulty);
+  };
+
+  const handleCreateRoom = async (difficulty: Difficulty) => {
+    if (!selectedTopic || !difficulty) return;
+    // await createRoomAction(selectedDifficulty); // ❌ Removed call to createRoomAction
+    await actions.createRoom(difficulty, selectedTopic); // ✅ Directly call context action
+    // router.push(`/game/lobby/${roomCode}`); // Redirection is handled in context action now
+  };
+
+  const handleGoBackToTopics = () => {
+    setCurrentStep(CreationStep.TOPIC_SELECT);
+    setSelectedDifficulty(null);
+  };
+
+  if (isLoadingTopics) {
+    return <p>Cargando temas...</p>;
+  }
+
+  if (isErrorTopics || !topics) {
+    return <p>Error al cargar temas: {errorTopics?.message || 'Desconocido'}</p>;
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-h-screen flex flex-col items-center justify-center bg-gray-100 space-y-6 p-8"
+    >
+      <h1 className="text-3xl font-bold mb-4">Crear Sala</h1>
+
+      {currentStep === CreationStep.TOPIC_SELECT && <TopicSelector topics={topics} onTopicSelect={handleTopicSelect} />}
+
+      {currentStep === CreationStep.DIFFICULTY_SELECT && (
+        <>
+          <motion.button
+            onClick={handleGoBackToTopics}
+            className="mb-4 text-sm text-blue-500 underline"
+            whileHover={{ scale: 1.05 }}
+          >
+            Volver a seleccionar tema
+          </motion.button>
+          <DifficultySelector onCreate={handleDifficultySelect} />
+        </>
+      )}
+
+      {currentStep === CreationStep.CREATING && (
+        <motion.div className="flex items-center space-x-2 text-gray-700">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+          <span>Creando sala...</span>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\error.tsx
+----------------------------------
+'use client';
+
+import React, { useEffect } from 'react';
+
+interface ErrorProps {
+  error: Error;
+  reset: () => void;
+}
+
+export default function GameError({ error, reset }: ErrorProps) {
+  useEffect(() => {
+    console.error('Error en el módulo de juego:', error);
+  }, [error]);
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-yellow-100 p-8">
+      <h1 className="text-3xl font-bold text-yellow-700">Error en el juego</h1>
+      <p className="mt-4 text-lg text-gray-800">{error.message || 'Ha ocurrido un error en el juego.'}</p>
+      <button onClick={reset} className="mt-6 px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700">
+        Reintentar
+      </button>
+    </div>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\join\page.tsx
+----------------------------------
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { useGameContext } from '../context/game-context';
+
+export default function JoinGamePage() {
+  const [roomCode, setRoomCode] = useState('');
+  const [playerName, setPlayerName] = useState('');
+  const { webSocketService } = useGameContext();
+  const router = useRouter();
+
+  const handleJoin = async () => {
+    if (!roomCode || !playerName || !webSocketService.socket) return;
+
+    console.log('Emitting join-room event:', { roomId: roomCode.toUpperCase(), playerName });
+
+    webSocketService.emit('join-room', roomCode.toUpperCase(), playerName, (room) => {
+      console.log('Direct join-room callback received (TEST). Room data:', room);
+      if (room) {
+        // Navigation is now handled by GamePage based on room-update events
+        // router.push(`/game/play/${roomCode.toUpperCase()}`); // ❌ Removed direct navigation
+      } else {
+        console.error('Direct join failed or room not found (TEST - callback)');
+      }
+    });
+  };
+
+  // Effect to ensure WebSocket is connected before component renders (TEST)
+  useEffect(() => {
+    if (!webSocketService.isConnected) {
+      webSocketService.connect();
+    }
+  }, [webSocketService]);
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 space-y-6">
+      <h1 className="text-3xl font-bold">Unirse a Sala</h1>
+      <input
+        type="text"
+        placeholder="Código de sala"
+        value={roomCode}
+        onChange={(e) => setRoomCode(e.target.value)}
+        className="px-4 py-3 border rounded-lg w-64"
+      />
+      <input
+        type="text"
+        placeholder="Tu nombre"
+        value={playerName}
+        onChange={(e) => setPlayerName(e.target.value)}
+        className="px-4 py-3 border rounded-lg w-64"
+      />
+      <motion.button
+        onClick={handleJoin}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        className="px-6 py-3 bg-blue-500 text-white rounded-lg font-semibold shadow-md"
+      >
+        Unirse
+      </motion.button>
+      <motion.button
+        onClick={() => router.push('/game')}
+        whileHover={{ scale: 1.05 }}
+        className="text-sm text-blue-500 underline"
+      >
+        Volver
+      </motion.button>
+    </div>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\lobby\[roomId]\page.tsx
+----------------------------------
+'use client';
+import React, { useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { useRoomUpdate } from '../../../hooks/useRoomUpdate';
+import { useGameContext } from '../../context/game-context';
+
+export default function LobbyPage() {
+  const { roomId } = useParams<{ roomId: string }>();
+  const router = useRouter();
+  const { state } = useGameContext();
+
+  useRoomUpdate(roomId); // ✅ Use useRoomUpdate hook for WebSocket updates
+
+  useEffect(() => {
+    if (state.players.length >= 2) {
+      router.push(`/game/play/${roomId}`);
+    }
+  }, [state.players.length, roomId, router]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+        <h1 className="text-2xl font-bold mb-4 text-center">Sala: {roomId}</h1>
+        <div className="text-center mb-6">
+          <p className="text-gray-600">Comparte este código con otros jugadores:</p>
+          <button
+            onClick={() => navigator.clipboard.writeText(roomId)}
+            className="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+          >
+            Copiar código
+          </button>
+        </div>
+        <div className="text-center animate-pulse text-gray-500">Esperando jugadores...</div>
+      </motion.div>
+    </div>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\page.tsx
+----------------------------------
+'use client';
+
+import React from 'react';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+
+export default function GameHome() {
+  const router = useRouter();
+
+  const handleCreate = () => {
+    router.push('/game/create');
+  };
+
+  const handleJoin = () => {
+    router.push('/game/join');
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 space-y-8">
+      <h1 className="text-4xl font-bold">WordSearch Multiplayer</h1>
+      <div className="space-x-4">
+        <motion.button
+          onClick={handleCreate}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="px-6 py-3 bg-blue-500 text-white rounded-lg font-semibold shadow-md"
+        >
+          Crear Sala
+        </motion.button>
+        <motion.button
+          onClick={handleJoin}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="px-6 py-3 bg-green-500 text-white rounded-lg font-semibold shadow-md"
+        >
+          Unirse a Sala
+        </motion.button>
+      </div>
+    </div>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\play\[roomId]\components\GameCell.tsx
+----------------------------------
+'use client';
+
+import { motion } from 'framer-motion';
+import React from 'react';
+import { Cell } from '../../../../types/types';
+import { useGameContext } from '../../../context/game-context';
+
+interface GameCellProps {
+  cell: Cell;
+  isSelected: boolean;
+  onSelectStart: (position: [number, number]) => void;
+  onSelectEnd: () => void;
+  onSelectEnter: (position: [number, number]) => void;
+}
+
+export default function GameCell({ cell, isSelected, onSelectStart, onSelectEnd, onSelectEnter }: GameCellProps) {
+  const { state } = useGameContext();
+  const player = state.players.find((p) => p.id === cell.foundBy);
+
+  const backgroundStyle = isSelected
+    ? { backgroundColor: '#bfdbfe' }
+    : player
+      ? { backgroundColor: player.color }
+      : { backgroundColor: '#ffffff' };
+
+  return (
+    <motion.div
+      className="flex items-center justify-center border border-gray-300 rounded cursor-pointer select-none relative"
+      onMouseDown={() => onSelectStart([cell.x, cell.y])}
+      onMouseUp={onSelectEnd}
+      onMouseEnter={() => onSelectEnter([cell.x, cell.y])}
+      onTouchStart={() => onSelectStart([cell.x, cell.y])}
+      onTouchEnd={onSelectEnd}
+      whileHover={{ scale: 1.05 }}
+      transition={{ duration: 0.1 }}
+      style={{ minHeight: '40px', minWidth: '40px', ...backgroundStyle }}
+    >
+      <span className="text-lg font-bold">{cell.letter}</span>
+    </motion.div>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\play\[roomId]\components\GameGrid.tsx
+----------------------------------
+'use client';
+
+import React, { useState } from 'react';
+import GameCell from './GameCell';
+import { useGameContext } from '../../../context/game-context';
+
+export default function GameGrid() {
+  const { state, actions } = useGameContext();
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [startPos, setStartPos] = useState<[number, number] | null>(null);
+
+  if (state.grid.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-96 text-gray-500">
+        <p>Cargando grid...</p>
+      </div>
+    );
+  }
+
+  const getCellsBetween = (start: [number, number], end: [number, number]): [number, number][] => {
+    let [x0, y0] = start;
+    const [x1, y1] = end;
+    const dx = Math.abs(x1 - x0);
+    const dy = Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx - dy;
+    const cells: [number, number][] = [];
+    while (true) {
+      cells.push([x0, y0]);
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 > -dy) {
+        err -= dy;
+        x0 += sx;
+      }
+      if (e2 < dx) {
+        err += dx;
+        y0 += sy;
+      }
+    }
+    return cells;
+  };
+
+  const handleSelectStart = (position: [number, number]) => {
+    console.log('handleSelectStart:', position);
+    setIsSelecting(true);
+    setStartPos(position);
+    actions.selectCells([position]);
+  };
+
+  const handleSelectEnter = (position: [number, number]) => {
+    if (isSelecting && startPos) {
+      const selection = getCellsBetween(startPos, position);
+      console.log('handleSelectEnter:', selection);
+      actions.selectCells(selection);
+    }
+  };
+
+  const handleSelectEnd = () => {
+    console.log('handleSelectEnd');
+    if (isSelecting) {
+      actions.submitSelection();
+    }
+    setIsSelecting(false);
+    setStartPos(null);
+  };
+
+  return (
+    <div className="bg-gray-100 p-4 rounded shadow-md">
+      {state.grid.map((row, y) => (
+        <div
+          key={y}
+          className="grid gap-1 mb-1"
+          style={{
+            gridTemplateColumns: `repeat(${row.length}, minmax(40px, 1fr))`,
+          }}
+        >
+          {row.map((cell, x) => (
+            <GameCell
+              key={`${x}-${y}`}
+              cell={cell}
+              isSelected={state.selectedCells.some(([cx, cy]) => cx === x && cy === y)}
+              onSelectStart={() => handleSelectStart([x, y])}
+              onSelectEnter={() => handleSelectEnter([x, y])}
+              onSelectEnd={handleSelectEnd}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\play\[roomId]\components\WordList.tsx
+----------------------------------
+'use client';
+
+import { motion } from 'framer-motion';
+import { useGameContext } from '../../../context/game-context';
+
+export default function WordList() {
+  const { state } = useGameContext();
+  const allWords = state.words || [];
+  const foundWords = state.foundWords;
+  const remainingWords = allWords.filter((word) => !foundWords.includes(word));
+
+  return (
+    <div className="w-full md:w-80 bg-white p-4 rounded-lg shadow-md">
+      <h2 className="text-xl font-bold mb-4 text-gray-700">
+        Palabras encontradas ({foundWords.length}) / por encontrar ({remainingWords.length})
+      </h2>
+      <div className="space-y-2">
+        {foundWords.map((word, index) => (
+          <motion.div
+            key={`found-${word}`}
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: index * 0.1 }}
+            className="flex items-center bg-green-50 p-2 rounded"
+          >
+            <span className="flex-1 text-gray-700 font-medium">{word}</span>
+            {/* Aquí se podría mostrar quién encontró la palabra, si la información está disponible */}
+          </motion.div>
+        ))}
+        {remainingWords.map((word, index) => (
+          <div key={`remaining-${word}`} className="flex items-center p-2 rounded bg-gray-50 opacity-50">
+            <span className="flex-1 text-gray-400 font-medium">{word}</span>
+            <span className="text-xs text-gray-400 ml-2">Por encontrar</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\play\[roomId]\page.tsx
+----------------------------------
+'use client';
+import React from 'react';
+import GameGrid from './components/GameGrid';
+import WordList from './components/WordList';
+import { useParams } from 'next/navigation';
+import { useGameRoom } from '../../../hooks/useGameRoom'; // ✅ Import useGameRoom
+
+export default function GamePage() {
+  const { roomId } = useParams<{ roomId: string }>();
+
+  useGameRoom(roomId);
+
+  return (
+    <div className="container mx-auto p-4">
+      <div className="grid md:grid-cols-[1fr_300px] gap-6">
+        <GameGrid />
+        <WordList />
+      </div>
+    </div>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\game\shared\infrastructure\websocket.ts
+----------------------------------
+// apps/web/src/app/game/shared/infrastructure/websocket.ts
+import { io, type Socket } from 'socket.io-client';
+import axios from 'axios';
+import type { RoomID } from '../../../types/types';
+import { API_URL } from '@wordsearch/config';
+import { Difficulty } from '@wordsearch/types';
+
+/**
+ * Genera un identificador único para la sala.
+ */
+export const generateRoomId = (): RoomID => {
+  return Math.random().toString(36).substring(2, 6).toUpperCase();
+};
+
+let socket: Socket | null = null;
+
+/**
+ * Conecta al servidor de WebSocket.
+ */
+export const connectWebSocket = async (): Promise<Socket> => {
+  if (!socket) {
+    console.log('Connecting to WebSocket server...');
+    socket = io(API_URL, {
+      path: '/api/socket', // Usamos el mismo path que configuraremos en el API
+      autoConnect: false,
+      transports: ['websocket'],
+    });
+    console.log('Socket created');
+
+    await new Promise<void>((resolve, reject) => {
+      socket!.on('connect', resolve).on('connect_error', reject).connect();
+    });
+  }
+  return socket;
+};
+
+/**
+ * Crea una sala:
+ *  - Genera un roomId.
+ *  - Solicita al API la generación del grid (enviando difficulty en el body).
+ *  - Conecta el WebSocket y emite el evento 'create-room' con los datos.
+ *
+ * @param difficulty La dificultad seleccionada.
+ * @returns Un objeto con el roomId y el grid generado.
+ */
+export const createRoom = async (
+  difficulty: Difficulty,
+  topic: string
+): Promise<{ roomId: RoomID; grid: string[][] }> => {
+  // ✅ Added topic param
+  const roomId = generateRoomId();
+
+  console.log('Creating room', roomId);
+
+  // Se envía difficulty y topic en el body para que el API lo reciba correctamente.
+  const { data: grid } = await axios.post<string[][]>(
+    `${API_URL}/api/game/generate-grid`,
+    { difficulty, topic } // ✅ Include topic in request body
+  );
+
+  const ws = await connectWebSocket();
+
+  // Se emite el evento 'create-room' con un objeto que contiene roomId, difficulty, grid, y topic.
+  ws.emit('create-room', { roomId, difficulty, grid, topic }); // ✅ Include topic in emit data
+
+  return { roomId, grid };
+};
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\globals.css
+----------------------------------
+@import "tailwindcss";
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\hooks\useGameRoom.ts
+----------------------------------
+'use client';
+import { useEffect } from 'react';
+import { RoomID } from '../types/types';
+import { GameRoom } from '@wordsearch/types';
+import { useGameContext } from '../game/context/game-context';
+
+export const useGameRoom = (roomId: RoomID) => {
+  const { dispatch, webSocketService } = useGameContext();
+
+  useEffect(() => {
+    if (!roomId || !webSocketService?.socket) {
+      return;
+    }
+
+    const roomUpdateListener = (updatedRoom: GameRoom) => {
+      console.log('GameRoom updated (useGameRoom):', updatedRoom);
+      dispatch({ type: 'INITIALIZE', payload: updatedRoom });
+    };
+
+    webSocketService.on('room-update', roomUpdateListener);
+
+    return () => {
+      webSocketService.off('room-update');
+    };
+  }, [roomId, dispatch, webSocketService]);
+};
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\hooks\useRoomUpdate.ts
+----------------------------------
+'use client';
+import { useEffect } from 'react';
+import { RoomID } from '../types/types';
+import { GameRoom } from '@wordsearch/types';
+import { useGameContext } from '../game/context/game-context';
+
+export const useRoomUpdate = (roomId: RoomID) => {
+  const { dispatch, webSocketService } = useGameContext();
+
+  useEffect(() => {
+    if (!roomId || !webSocketService?.socket) {
+      return;
+    }
+
+    const roomUpdateListener = (updatedRoom: GameRoom) => {
+      console.log('Room updated (useRoomUpdate):', updatedRoom);
+      dispatch({ type: 'INITIALIZE', payload: updatedRoom });
+    };
+
+    webSocketService.on('room-update', roomUpdateListener);
+
+    return () => {
+      webSocketService.off('room-update');
+    };
+  }, [roomId, dispatch, webSocketService]);
+};
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\hooks\useSocket.ts
+----------------------------------
+'use client';
+import {useEffect, useState} from 'react';
+import {io, type Socket} from 'socket.io-client';
+import {API_URL} from '@wordsearch/config';
+
+export const useSocket = (): { socket: Socket | null } => {
+    const [socket, setSocket] = useState<Socket | null>(null);
+
+    useEffect(() => {
+        const newSocket = io(API_URL, {
+            path: '/api/socket', // se usa el mismo path que en el módulo de websocket
+            autoConnect: false,
+            transports: ['websocket'],
+        });
+
+        console.log('Socket created (useSocket)');
+
+        setSocket(newSocket);
+
+        return () => {
+            newSocket.disconnect();
+        };
+    }, []);
+
+    return { socket };
+};
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\hooks\useTopics.ts
+----------------------------------
+'use client';
+import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
+import { API_URL } from '@wordsearch/config';
+
+interface TopicsResponse {
+  topics: string[];
+}
+
+const fetchTopics = async (): Promise<string[]> => {
+  const { data } = await axios.get<TopicsResponse>(`${API_URL}/api/game/topics`);
+  return data.topics;
+};
+
+export const useTopics = () => {
+  return useQuery({
+    queryKey: ['topics'],
+    queryFn: fetchTopics,
+    staleTime: Infinity, // Topics should not change frequently
+  });
+};
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\hooks\useWebsocketService.ts
+----------------------------------
+'use client';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { io, Socket } from 'socket.io-client';
+import { API_URL } from '@wordsearch/config';
+
+export interface WebSocketService {
+  socket: Socket | null;
+  isConnected: boolean;
+  connect: () => Promise<void>;
+  disconnect: () => void;
+  emit: <T extends any[]>(event: string, ...data: [...T, ((...args: any[]) => void)?]) => void;
+  on: (event: string, listener: (...args: any[]) => void) => void;
+  off: (event: string) => void;
+}
+
+export const useWebSocketService = (): WebSocketService => {
+  const [socketInstance, setSocketInstance] = useState<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const eventListeners = useRef(new Map<string, (...args: any[]) => void>());
+
+  const connect = useCallback(async () => {
+    if (socketInstance) return;
+
+    console.log('Connecting to WebSocket server...');
+    const newSocket = io(API_URL, {
+      path: '/api/socket',
+      autoConnect: false,
+      transports: ['websocket'],
+    });
+
+    newSocket.on('connect', () => {
+      console.log('WebSocket connected');
+      setIsConnected(true);
+    });
+
+    newSocket.on('disconnect', () => {
+      console.log('WebSocket disconnected');
+      setIsConnected(false);
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('WebSocket connection error:', error);
+      setIsConnected(false);
+    });
+
+    eventListeners.current.forEach((listener, eventName) => {
+      newSocket.on(eventName, listener);
+    });
+
+    setSocketInstance(newSocket);
+    newSocket.connect();
+  }, [socketInstance]);
+
+  const disconnect = useCallback(() => {
+    if (socketInstance) {
+      socketInstance.disconnect();
+      setSocketInstance(null);
+      setIsConnected(false);
+    }
+  }, [socketInstance]);
+
+  // ✅ Modified emit implementation to handle multiple data arguments
+  const emit = useCallback(
+    <T extends any[]>(event: string, ...data: [...T, ((...args: any[]) => void)?]) => {
+      if (socketInstance && isConnected) {
+        socketInstance.emit(event, ...data); // Spread the data arguments
+      } else {
+        console.warn(`Socket not connected, cannot emit event: ${event}`);
+      }
+    },
+    [socketInstance, isConnected]
+  );
+
+  const on = useCallback(
+    (event: string, listener: (...args: any[]) => void) => {
+      if (socketInstance) {
+        socketInstance.on(event, listener);
+        eventListeners.current.set(event, listener);
+      } else {
+        console.warn(`Socket not initialized, cannot attach listener for event: ${event}`);
+      }
+    },
+    [socketInstance]
+  );
+
+  const off = useCallback(
+    (event: string) => {
+      if (socketInstance) {
+        socketInstance.off(event);
+        eventListeners.current.delete(event);
+      }
+    },
+    [socketInstance]
+  );
+
+  useEffect(() => {
+    connect();
+    return disconnect;
+  }, [connect, disconnect]);
+
+  return {
+    socket: socketInstance,
+    isConnected,
+    connect,
+    disconnect,
+    emit,
+    on,
+    off,
+  };
+};
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\layout.tsx
+----------------------------------
+import './globals.css';
+import React from 'react';
+import Providers from './providers';
+
+export const metadata = {
+  title: 'WordSearch Multiplayer',
+  description: 'Juego de búsqueda de palabras multijugador',
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="es">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\manifest.ts
+----------------------------------
+import type { MetadataRoute } from 'next';
+
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: 'WordSearch Multiplayer',
+    description: 'Juego de búsqueda de palabras multijugador',
+    start_url: '/',
+    display: 'standalone',
+    theme_color: '#000000',
+    background_color: '#ffffff',
+    icons: [
+      {
+        src: '/icon-192x192.png',
+        sizes: '192x192',
+        type: 'image/png',
+      },
+      {
+        src: '/icon-512x512.png',
+        sizes: '512x512',
+        type: 'image/png',
+      },
+    ],
+  };
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\page.tsx
+----------------------------------
+'use client';
+
+import React from 'react';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+
+export default function HomePage() {
+  const router = useRouter();
+
+  const handlePlay = () => {
+    // Redirige al usuario a la pantalla de selección de juego (/game)
+    router.push('/game');
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 space-y-8">
+      <h1 className="text-5xl font-bold text-center">Bienvenido a WordSearch Multiplayer</h1>
+      <p className="text-xl text-gray-700 text-center">Crea una sala o únete a una existente para jugar en grupo</p>
+      <motion.button
+        onClick={handlePlay}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        className="px-8 py-4 bg-blue-500 text-white rounded-lg font-semibold shadow-md"
+      >
+        Jugar
+      </motion.button>
+    </div>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\providers.tsx
+----------------------------------
+'use client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { GameProvider } from './game/context/game-context';
+import React, { useState } from 'react';
+
+const ReactQueryProvider = ({ children }: { children: React.ReactNode }) => {
+  const [queryClient] = useState(() => new QueryClient());
+
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+};
+
+export default function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <ReactQueryProvider>
+      <GameProvider>
+        <main className="container mx-auto p-4 h-screen flex flex-col items-center justify-center bg-gray-100 space-y-8">
+          {children}
+        </main>
+      </GameProvider>
+    </ReactQueryProvider>
+  );
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\src\app\types\types.ts
+----------------------------------
+// apps/web/src/app/game/shared/domain/types.ts
+import { Difficulty, GameRoom, Player } from '@wordsearch/types';
+
+export type RoomID = string;
+
+export type GameState = {
+  id: RoomID;
+  players: Player[];
+  grid: Cell[][];
+  foundWords: string[];
+  difficulty: Difficulty;
+  words: string[];
+  topic: string;
+  status: 'waiting' | 'playing' | 'finished';
+};
+
+export type Cell = {
+  x: number;
+  y: number;
+  letter: string;
+  foundBy: string | null;
+  selectedBy?: string[];
+};
+
+export type GameContextState = GameState & {
+  selectedCells: [number, number][];
+  error: string | null;
+};
+
+export type GameAction =
+  | { type: 'INITIALIZE'; payload: GameRoom }
+  | { type: 'UPDATE_STATE'; payload: Partial<GameState> }
+  | { type: 'SELECT_CELLS'; payload: [number, number][] }
+  | { type: 'RESET_SELECTION' }
+  | { type: 'ADD_FOUND_WORD'; payload: string }
+  | { type: 'SET_ERROR'; payload: string };
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\tailwind.config.ts
+----------------------------------
+import type { Config } from "tailwindcss";
+
+export default {
+  content: [
+    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        background: "var(--background)",
+        foreground: "var(--foreground)",
+      },
+    },
+  },
+  plugins: [],
+} satisfies Config;
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\apps\web\tsconfig.json
+----------------------------------
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": ".",
+    "declaration": true,
+    "target": "esnext",
+    "module": "CommonJS",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "noEmit": true,
+    "incremental": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+  "include": [
+    "next-env.d.ts",
+    ".next/types/**/*.ts",
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\generateProjectSummary.js
+----------------------------------
+const fs = require('fs');
+const path = require('path');
+
+const IGNORE_DIRS = [
+  'node_modules',
+  '.git',
+  '.idea',
+  '.vscode',
+  'dist',
+  'build',
+  'coverage',
+  'out',
+  '__pycache__',
+  '.turbo',
+  '.next',
+];
+const IGNORE_FILES = ['package-lock.json', 'yarn.lock', '.DS_Store', 'Thumbs.db'];
+const TEXT_EXTENSIONS = ['.js', '.ts', '.tsx', '.json', '.md', '.html', '.css', '.scss', '.env', '.py', '.java', '.sh'];
+
+const OUTPUT_FILE = 'project_summary.txt';
+
+/**
+ * Recorre el directorio y obtiene una lista de archivos relevantes.
+ * @param {string} dir - Directorio a explorar.
+ * @param {Array} filesList - Lista donde se guardan los archivos encontrados.
+ */
+function getFiles(dir, filesList = []) {
+  const files = fs.readdirSync(dir);
+
+  for (const file of files) {
+    const filePath = path.join(dir, file);
+    const stat = fs.statSync(filePath);
+
+    if (stat.isDirectory()) {
+      if (!IGNORE_DIRS.includes(file)) {
+        getFiles(filePath, filesList);
+      }
+    } else {
+      if (!IGNORE_FILES.includes(file) && TEXT_EXTENSIONS.includes(path.extname(file))) {
+        filesList.push(filePath);
+      }
+    }
+  }
+  return filesList;
+}
+
+/**
+ * Genera un archivo de texto con el contenido de todos los archivos relevantes del proyecto.
+ * @param {string} rootDir - Directorio raíz del proyecto.
+ */
+function generateProjectSummary(rootDir) {
+  const files = getFiles(rootDir);
+  let summaryContent = `📂 Resumen del Proyecto en: ${rootDir}\n\n`;
+
+  for (const file of files) {
+    try {
+      const content = fs.readFileSync(file, 'utf-8');
+
+      summaryContent += `📝 Archivo: ${file}\n`;
+      summaryContent += `----------------------------------\n`;
+      summaryContent += `${content}\n`;
+      summaryContent += `\n----------------------------------\n\n`;
+    } catch (error) {
+      console.error(`❌ Error al leer ${file}: ${error.message}`);
+    }
+  }
+
+  fs.writeFileSync(OUTPUT_FILE, summaryContent, 'utf-8');
+  console.log(`✅ Resumen generado en '${OUTPUT_FILE}'`);
+}
+
+// Ejecutar el script desde la carpeta actual
+generateProjectSummary(process.cwd());
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\package.json
+----------------------------------
+{
+  "name": "wordsearch-monorepo",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+  },
+  "devDependencies": {
+    "angular-eslint": "^19.0.2",
+    "eslint": "9.14.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.2.3",
+    "prettier": "^3.3.3",
+    "prettier-eslint": "^16.3.0",
+    "turbo": "^2.3.4",
+    "typescript": "5.5.4",
+    "typescript-eslint": "^8.15.0",
+    "@typescript-eslint/parser": "^8.23.0",
+    "@typescript-eslint/eslint-plugin": "^8.23.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=18"
+  }
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\packages\config\package.json
+----------------------------------
+{
+  "name": "@wordsearch/config",
+  "version": "1.0.0",
+  "main": "dist/src/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1"
+  },
+    "devDependencies": {
+        "typescript": "^4.5.5",
+        "@types/node": "^22.13.1"
+    }
+
+}
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\packages\config\src\index.ts
+----------------------------------
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+export const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL || 'http://localhost:3000';
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\packages\config\tsconfig.json
+----------------------------------
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "declaration": true,
+    "composite": true,
+    "rootDir": ".",
+
+  },
+  "exclude": ["node_modules", "dist"],
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\packages\types\index.ts
+----------------------------------
+export * from './src/game'
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\packages\types\package.json
+----------------------------------
+{
+  "name": "@wordsearch/types",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "tsc -w"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "devDependencies": {
+    "typescript": "latest"
+  }
+}
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\packages\types\src\game.ts
+----------------------------------
+export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert' | 'numbers';
+
+export interface Player {
+  id: string;
+  name: string;
+  color: string;
+  score: number;
+}
+
+export interface GameRoom {
+  id: string;
+  players: Player[];
+  difficulty: Difficulty;
+  grid: string[][];
+  words: string[];
+  status: 'waiting' | 'playing' | 'finished';
+  topic: string;
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\packages\types\tsconfig.json
+----------------------------------
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["./**/*"],
+  "exclude": ["node_modules", "dist"],
+  "compilerOptions": {
+    "outDir": "./dist",
+    "declaration": true,
+    "rootDir": ".",
+    "composite": true
+  }
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\packages\typescript-config\base.json
+----------------------------------
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": true,
+    "esModuleInterop": true,
+    "incremental": false,
+    "isolatedModules": true,
+    "lib": ["es2022", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleDetection": "force",
+    "moduleResolution": "NodeNext",
+    "noUncheckedIndexedAccess": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022"
+  }
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\packages\typescript-config\nextjs.json
+----------------------------------
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "plugins": [{ "name": "next" }],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowJs": true,
+    "jsx": "preserve",
+    "noEmit": true
+  }
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\packages\typescript-config\package.json
+----------------------------------
+{
+  "name": "@repo/typescript-config",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\packages\typescript-config\react-library.json
+----------------------------------
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx"
+  }
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\README.md
+----------------------------------
+# Turborepo starter
+
+This Turborepo starter is maintained by the Turborepo core team.
+
+## Using this example
+
+Run the following command:
+
+```sh
+npx create-turbo@latest
+```
+
+## What's inside?
+
+This Turborepo includes the following packages/apps:
+
+### Apps and Packages
+
+- `docs`: a [Next.js](https://nextjs.org/) app
+- `web`: another [Next.js](https://nextjs.org/) app
+- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
+- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
+- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+
+Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+
+### Utilities
+
+This Turborepo has some additional tools already setup for you:
+
+- [TypeScript](https://www.typescriptlang.org/) for static type checking
+- [ESLint](https://eslint.org/) for code linting
+- [Prettier](https://prettier.io) for code formatting
+
+### Build
+
+To build all apps and packages, run the following command:
+
+```
+cd my-turborepo
+pnpm build
+```
+
+### Develop
+
+To develop all apps and packages, run the following command:
+
+```
+cd my-turborepo
+pnpm dev
+```
+
+### Remote Caching
+
+> [!TIP]
+> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+
+Turborepo can use a technique known as [Remote Caching](https://turbo.build/repo/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+
+By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+
+```
+cd my-turborepo
+npx turbo login
+```
+
+This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+
+Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+
+```
+npx turbo link
+```
+
+## Useful Links
+
+Learn more about the power of Turborepo:
+
+- [Tasks](https://turbo.build/repo/docs/core-concepts/monorepos/running-tasks)
+- [Caching](https://turbo.build/repo/docs/core-concepts/caching)
+- [Remote Caching](https://turbo.build/repo/docs/core-concepts/remote-caching)
+- [Filtering](https://turbo.build/repo/docs/core-concepts/monorepos/filtering)
+- [Configuration Options](https://turbo.build/repo/docs/reference/configuration)
+- [CLI Usage](https://turbo.build/repo/docs/reference/command-line-reference)
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\tsconfig.base.json
+----------------------------------
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ES2022",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "rootDir": "./",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "resolveJsonModule": true
+  }
+}
+
+
+----------------------------------
+
+📝 Archivo: C:\Users\ksante\dev\wordsearch\turbo.json
+----------------------------------
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**", "!.next/server/**"]
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "check-types": {
+      "dependsOn": ["^check-types"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+        "dependsOn": ["^build"]
+    }
+  }
+}
+
+
+----------------------------------
+
