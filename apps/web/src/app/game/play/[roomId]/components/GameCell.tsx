@@ -1,51 +1,41 @@
 'use client';
-import {motion} from 'framer-motion';
-import type {Cell} from '@/app/game/shared/domain/types';
+
+import { motion } from 'framer-motion';
+import React from 'react';
+import { Cell } from '../../../../types/types';
+import { useGameContext } from '../../../context/game-context';
 
 interface GameCellProps {
-    cell: Cell;
-    isSelected: boolean;
-    onSelectStart: (position: [number, number]) => void;
-    onSelectEnd: () => void;
-    onSelectEnter: (position: [number, number]) => void;
+  cell: Cell;
+  isSelected: boolean;
+  onSelectStart: (position: [number, number]) => void;
+  onSelectEnd: () => void;
+  onSelectEnter: (position: [number, number]) => void;
 }
 
-export default function GameCell({
-                                     cell,
-                                     isSelected,
-                                     onSelectStart,
-                                     onSelectEnd,
-                                     onSelectEnter
-                                 }: GameCellProps) {
-    return (
-        <motion.div
-            className={`cell ${cell.foundBy ? 'bg-green-200' : 'bg-white'} ${
-                isSelected ? '!bg-blue-200' : ''
-            }`}
-            onMouseDown={() => onSelectStart([cell.x, cell.y])}
-            onMouseUp={onSelectEnd}
-            onMouseEnter={() => onSelectEnter([cell.x, cell.y])}
-            onTouchStart={() => onSelectStart([cell.x, cell.y])}
-            onTouchEnd={onSelectEnd}
-            animate={{
-                scale: isSelected ? 1.1 : 1,
-                transition: { duration: 0.1 }
-            }}
-        >
-            <span className="text-lg font-bold">{cell.letter}</span>
-            {cell.foundBy && (
-                <div
-                    className="found-indicator"
-                    style={{ backgroundColor: getPlayerColor(cell.foundBy) }}
-                />
-            )}
-        </motion.div>
-    );
-}
+export default function GameCell({ cell, isSelected, onSelectStart, onSelectEnd, onSelectEnter }: GameCellProps) {
+  const { state } = useGameContext();
+  const player = state.players.find((p) => p.id === cell.foundBy);
 
-// Función auxiliar para obtener colores de jugadores
-const getPlayerColor = (playerId: string) => {
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'];
-    const hash = playerId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[hash % colors.length];
-};
+  const backgroundStyle = isSelected
+    ? { backgroundColor: '#bfdbfe' }
+    : player
+      ? { backgroundColor: player.color }
+      : { backgroundColor: '#ffffff' };
+
+  return (
+    <motion.div
+      className="flex items-center justify-center border border-gray-300 rounded cursor-pointer select-none relative"
+      onMouseDown={() => onSelectStart([cell.x, cell.y])}
+      onMouseUp={onSelectEnd}
+      onMouseEnter={() => onSelectEnter([cell.x, cell.y])}
+      onTouchStart={() => onSelectStart([cell.x, cell.y])}
+      onTouchEnd={onSelectEnd}
+      whileHover={{ scale: 1.05 }}
+      transition={{ duration: 0.1 }}
+      style={{ minHeight: '40px', minWidth: '40px', ...backgroundStyle }}
+    >
+      <span className="text-lg font-bold">{cell.letter}</span>
+    </motion.div>
+  );
+}
