@@ -5,7 +5,7 @@ import GameCell from './GameCell';
 import { useGameContext } from '../../../context/game-context';
 
 export default function GameGrid() {
-  const { state, actions } = useGameContext();
+  const { state, actions } = useGameContext(); // ✅ Destructure actions from context
   const [isSelecting, setIsSelecting] = useState(false);
   const [startPos, setStartPos] = useState<[number, number] | null>(null);
 
@@ -17,7 +17,10 @@ export default function GameGrid() {
     );
   }
 
-  const getCellsBetween = (start: [number, number], end: [number, number]): [number, number][] => {
+  const getCellsBetween = (
+    start: [number, number],
+    end: [number, number]
+  ): [number, number][] => {
     let [x0, y0] = start;
     const [x1, y1] = end;
     const dx = Math.abs(x1 - x0);
@@ -46,21 +49,21 @@ export default function GameGrid() {
     console.log('handleSelectStart:', position);
     setIsSelecting(true);
     setStartPos(position);
-    actions.selectCells([position]);
+    actions.selectCells([position]); // ✅ Now actions.selectCells should be defined
   };
 
   const handleSelectEnter = (position: [number, number]) => {
     if (isSelecting && startPos) {
       const selection = getCellsBetween(startPos, position);
       console.log('handleSelectEnter:', selection);
-      actions.selectCells(selection);
+      actions.selectCells(selection); // ✅ And here as well
     }
   };
 
   const handleSelectEnd = () => {
     console.log('handleSelectEnd');
     if (isSelecting) {
-      actions.submitSelection();
+      actions.submitSelection(); // Assuming you have this action in useGameActions
     }
     setIsSelecting(false);
     setStartPos(null);
@@ -80,7 +83,9 @@ export default function GameGrid() {
             <GameCell
               key={`${x}-${y}`}
               cell={cell}
-              isSelected={state.selectedCells.some(([cx, cy]) => cx === x && cy === y)}
+              isSelected={state.selectedCells.some(
+                ([cx, cy]) => cx === x && cy === y
+              )}
               onSelectStart={() => handleSelectStart([x, y])}
               onSelectEnter={() => handleSelectEnter([x, y])}
               onSelectEnd={handleSelectEnd}

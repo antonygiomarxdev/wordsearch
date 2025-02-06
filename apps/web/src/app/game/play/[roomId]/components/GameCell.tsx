@@ -13,15 +13,36 @@ interface GameCellProps {
   onSelectEnter: (position: [number, number]) => void;
 }
 
-export default function GameCell({ cell, isSelected, onSelectStart, onSelectEnd, onSelectEnter }: GameCellProps) {
-  const { state } = useGameContext();
+export default function GameCell({
+  cell,
+  isSelected,
+  onSelectStart,
+  onSelectEnd,
+  onSelectEnter,
+}: GameCellProps) {
+  console.log(
+    `🔄 GameCell re-rendering for cell x:${cell.x}, y:${cell.y}, selectedBy:`,
+    cell.selectedBy
+  ); // Log re-render and selectedBy
+  const { state, webSocketService } = useGameContext();
   const player = state.players.find((p) => p.id === cell.foundBy);
+  const isSelectedByOther =
+    cell.selectedBy &&
+    cell.selectedBy.length > 0 &&
+    !cell.selectedBy.includes(webSocketService.socket?.id || '');
+
+  console.log(
+    `   isSelectedByOther for cell x:${cell.x}, y:${cell.y}:`,
+    isSelectedByOther
+  ); // Log isSelectedByOther
 
   const backgroundStyle = isSelected
     ? { backgroundColor: '#bfdbfe' }
-    : player
-      ? { backgroundColor: player.color }
-      : { backgroundColor: '#ffffff' };
+    : isSelectedByOther
+      ? { backgroundColor: 'rgba(200, 200, 200, 0.5)' }
+      : player
+        ? { backgroundColor: player.color }
+        : { backgroundColor: '#ffffff' };
 
   return (
     <motion.div
