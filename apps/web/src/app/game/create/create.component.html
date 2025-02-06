@@ -1,0 +1,16 @@
+<div class="min-h-screen flex flex-col items-center justify-center bg-gray-100 space-y-6 p-8">
+  <h1 class="text-3xl font-bold mb-4">Crear Sala</h1>
+  <ng-container *ngIf="currentStep === creationStep.TOPIC_SELECT">
+    <app-topic-selector (topicSelect)="handleTopicSelect($event)" [topics]="topics"></app-topic-selector>
+  </ng-container>
+  <ng-container *ngIf="currentStep === creationStep.DIFFICULTY_SELECT">
+    <button (click)="handleGoBackToTopics()" mat-button>Volver a seleccionar tema</button>
+    <app-difficulty-selector (difficultySelect)="handleDifficultySelect($event)"></app-difficulty-selector>
+  </ng-container>
+  <ng-container *ngIf="currentStep === creationStep.CREATING">
+    <div class="flex items-center space-x-2 text-gray-700">
+      <mat-progress-spinner diameter="24" mode="indeterminate"></mat-progress-spinner>
+      <span>Creando sala...</span>
+    </div>
+  </ng-container>
+</div>
