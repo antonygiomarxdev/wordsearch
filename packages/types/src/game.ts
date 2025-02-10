@@ -7,12 +7,22 @@ export interface Player {
   score: number;
 }
 
+export type Cell = {
+  x: number;
+  y: number;
+  letter: string;
+  foundBy: string | null;
+  selectedBy?: Player[];
+};
+
 export interface GameRoom {
   id: string;
   players: Player[];
   difficulty: Difficulty;
-  grid: string[][];
+  grid: Cell[][];
   words: string[];
   status: 'waiting' | 'playing' | 'finished';
   topic: string;
 }
+
+export type EventTypes = 'join' | 'start' | 'select' | 'finish' | 'score';
