@@ -10,6 +10,7 @@ import {
 import { GameService } from './game.service';
 import { CreateGridDto } from './dto/create-grid.dto';
 import { GetWordsDto } from './dto/get-words.dto';
+import { CreateRoomDto } from './dto/create-room.dto';
 
 @Controller('game')
 export class GameController {
@@ -27,6 +28,18 @@ export class GameController {
       throw new NotFoundException('Room not found');
     }
     return room;
+  }
+
+  @Post('create-room')
+  createRoom(@Body() createRoomDto: CreateRoomDto) {
+    const { difficulty, topic } = createRoomDto;
+    try {
+      return this.gameService.createRoom(difficulty, topic);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : error
+      );
+    }
   }
 
   @Post('generate-grid')
