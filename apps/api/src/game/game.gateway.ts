@@ -9,14 +9,14 @@ import {
 import { Socket } from 'socket.io';
 import { GameService } from './game.service';
 import { Logger } from '@nestjs/common';
-import { Difficulty, GameRoom, Player } from '@wordsearch/types';
+import { GameRoom, Player } from '@wordsearch/types';
 
 @WebSocketGateway({
   cors: {
     origin:
       process.env.NODE_ENV === 'production'
         ? process.env.CLIENT_URL
-        : 'http://localhost:3000',
+        : 'http://localhost:4200',
     methods: ['GET', 'POST'],
   },
   path: '/api/socket',
@@ -32,93 +32,55 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Cliente desconectado: ${client.id}`);
-    // Lógica para remover jugador de la sala y limpiar salas vacías
-  }
-
-  @SubscribeMessage('create-room')
-  handleCreateRoom(
-    @MessageBody()
-    data: {
-      difficulty: Difficulty;
-      grid?: string[][];
-      roomId?: string;
-      topic: string;
-      words: string[];
-      creatorName?: string;
-    },
-    @ConnectedSocket() client: Socket
-  ): void {
-    // Si no se recibe roomId, genera uno
-    const roomId = data.roomId || this.generateRoomId();
-    // Si no se recibe grid, genera uno (puedes llamar a gameService.generateGrid)
-    const grid =
-      data.grid || this.gameService.generateGrid(data.difficulty, data.topic);
-    // Cargar la lista de palabras usando gameService.getWords
-    let wordsForRoom: string[] = [];
-    try {
-      wordsForRoom = this.gameService.getWords(data.topic, data.difficulty);
-    } catch (error) {
-      if (error instanceof Error) {
-        this.logger.warn(error.message);
-      } else {
-        this.logger.warn('Error al cargar las palabras');
-      }
-    }
-    const newRoom: GameRoom = {
-      id: roomId,
-      players: [],
-      difficulty: data.difficulty,
-      grid,
-      words: wordsForRoom,
-      topic: data.topic,
-      status: 'waiting',
-    };
-
-    // Agregar automáticamente al creador como jugador
-    const newPlayer: Player = {
-      id: client.id,
-      name: data.creatorName || 'Host',
-      score: 0,
-      color: this.getPlayerColor(0),
-    };
-    newRoom.players.push(newPlayer);
-    client.join(roomId);
-    // Aquí deberías guardar la sala en tu servicio (por ejemplo, gameService.addRoom(newRoom))
-    // y emitir un callback o emitir un evento de confirmación
-    client.emit('room-created', newRoom);
-    this.logger.log(`Sala creada: ${roomId}`);
   }
 
   @SubscribeMessage('join-room')
-  handleJoinRoom(
+  async handleJoinRoom(
     @MessageBody() data: { roomId: string; playerName: string },
     @ConnectedSocket() client: Socket
-  ): void {
-    // Lógica para que un jugador se una a la sala
-    // Por ejemplo:
+  ): Promise<void> {
+    this.logger.log(
+      `Jugador ${data.playerName} intenta unirse a la sala: ${data.roomId}`
+    );
+
     const room = this.gameService.getRoom(data.roomId);
+
     if (!room) {
+      this.logger.error(`Room not found: ${data.roomId}`);
       client.emit('join-error', 'Room not found');
       return;
     }
+
     if (room.players.length >= 4) {
-      client.emit('join-error', 'Room full');
+      this.logger.error(`Room is full: ${data.roomId}`);
+      client.emit('join-error', 'Room is full');
       return;
     }
+
     const newPlayer: Player = {
       id: client.id,
       name: data.playerName,
       score: 0,
       color: this.getPlayerColor(room.players.length),
     };
+
     room.players.push(newPlayer);
-    client.join(data.roomId);
-    // Notificar a los demás jugadores de la sala
-    client.to(data.roomId).emit('room-update', room);
-    client.emit('room-update', room);
+
+    await client.join(data.roomId);
+    client.emit('room-update', { room });
+    client.emit('join-success', { roomId: data.roomId, playerId: client.id });
     this.logger.log(
       `Jugador ${data.playerName} se unió a la sala: ${data.roomId}`
     );
+  }
+
+  @SubscribeMessage('room-update')
+  handleRoomUpdate(
+    @MessageBody() data: GameRoom,
+    @ConnectedSocket() client: Socket
+  ): void {
+    const room = this.gameService.getRoom(data.id);
+    client.to(data.id).emit('room-update', room);
   }
 
   @SubscribeMessage('cell-selection-update')
