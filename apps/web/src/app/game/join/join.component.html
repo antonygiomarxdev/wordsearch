@@ -1,0 +1,7 @@
+<div class="min-h-screen flex flex-col items-center justify-center bg-gray-100 space-y-6">
+  <h1 class="text-3xl font-bold">Unirse a Sala</h1>
+  <input [(ngModel)]="roomCode" class="px-4 py-3 border rounded-lg w-64" placeholder="Código de sala" type="text" />
+  <input [(ngModel)]="playerName" class="px-4 py-3 border rounded-lg w-64" placeholder="Tu nombre" type="text" />
+  <button (click)="handleJoin()" color="primary" mat-raised-button>Unirse</button>
+  <button (click)="goBack()" mat-button>Volver</button>
+</div>
