@@ -1,0 +1,20 @@
+{
+  "animales": {
+    "easy": ["PERRO", "GATO", "PEZ"],
+    "medium": ["ELEFANTE", "JIRAFA", "COCODRILO"],
+    "hard": ["HIPOPÓTAMO", "CAMALEÓN", "CEBRA"],
+    "expert": ["ORNITORRINCO", "HIPOPOTOMONSTROS"]
+  },
+  "paises": {
+    "easy": ["ESPAÑA", "PERÚ", "CHILE"],
+    "medium": ["ARGENTINA", "COLOMBIA", "URUGUAY"],
+    "hard": ["REPÚBLICA DOMINICANA", "COSTA RICA", "PARAGUAY"],
+    "expert": ["REPÚBLICA DE COREA", "REPÚBLICA POPULAR CHINA"]
+  },
+  "frutas": {
+    "easy": ["MANZANA", "PERA", "UVA"],
+    "medium": ["SANDÍA", "MELÓN", "PIÑA"],
+    "hard": ["FRAMBUESA", "ARÁNDANO", "MANGO"],
+    "expert": ["GUAYABA", "MARACUYÁ", "PITAHAYA"]
+  }
+}
