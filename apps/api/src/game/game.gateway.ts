@@ -67,10 +67,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     room.players.push(newPlayer);
 
     await client.join(data.roomId);
-    client.emit('room-update', { room });
     client.emit('join-success', { roomId: data.roomId, playerId: client.id });
+    client.emit('room-update', { room });
     this.logger.log(
-      `Jugador ${data.playerName} se unió a la sala: ${data.roomId}`
+      `Jugador ${data.playerName} se unió a la sala: ${data.roomId}`,
+      { room }
     );
   }
 
