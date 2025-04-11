@@ -1,14 +1,6 @@
-import { Difficulty, Player } from '@wordsearch/types';
+import { Cell, Difficulty, Player } from '@wordsearch/types';
 
 export type RoomID = string;
-
-export type Cell = {
-  x: number;
-  y: number;
-  letter: string;
-  foundBy: string | null;
-  selectedBy?: string[];
-};
 
 export type GameState = {
   id: RoomID;
@@ -19,6 +11,6 @@ export type GameState = {
   words: string[];
   topic: string;
   status: 'waiting' | 'playing' | 'finished';
-  selectedCells: [number, number][];
+  selectedCells: Cell[];
   error: string | null;
 };

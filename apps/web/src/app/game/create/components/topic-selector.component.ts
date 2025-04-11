@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -12,7 +12,7 @@ import { CommonModule } from '@angular/common';
       </h2>
       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <button
-          *ngFor="let topic of topics"
+          *ngFor="let topic of safeTopics(); let i = index"
           class="px-4 py-2 rounded-lg font-semibold shadow-md border bg-white text-gray-800 hover:bg-blue-100"
           (click)="onTopicSelect(topic)"
         >
@@ -23,8 +23,10 @@ import { CommonModule } from '@angular/common';
   `,
 })
 export class TopicSelectorComponent {
-  @Input() topics: string[] = [];
-  @Output() topicSelect = new EventEmitter<string>();
+  topics = input<string[]>([]);
+  safeTopics = computed(() => this.topics() || []);
+
+  topicSelect = output<string>();
 
   onTopicSelect(topic: string): void {
     this.topicSelect.emit(topic);

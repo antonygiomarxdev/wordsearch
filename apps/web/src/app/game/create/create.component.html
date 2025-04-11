@@ -1,16 +1,56 @@
-<div class="min-h-screen flex flex-col items-center justify-center bg-gray-100 space-y-6 p-8">
-  <h1 class="text-3xl font-bold mb-4">Crear Sala</h1>
-  <ng-container *ngIf="currentStep === creationStep.TOPIC_SELECT">
-    <app-topic-selector (topicSelect)="handleTopicSelect($event)" [topics]="topics"></app-topic-selector>
-  </ng-container>
-  <ng-container *ngIf="currentStep === creationStep.DIFFICULTY_SELECT">
-    <button (click)="handleGoBackToTopics()" mat-button>Volver a seleccionar tema</button>
-    <app-difficulty-selector (difficultySelect)="handleDifficultySelect($event)"></app-difficulty-selector>
-  </ng-container>
-  <ng-container *ngIf="currentStep === creationStep.CREATING">
-    <div class="flex items-center space-x-2 text-gray-700">
-      <mat-progress-spinner diameter="24" mode="indeterminate"></mat-progress-spinner>
-      <span>Creando sala...</span>
-    </div>
-  </ng-container>
+<!-- Main container with improved background -->
+<div class="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 to-gray-200 p-8">
+  <div class="bg-white rounded-lg shadow-lg p-8 w-full max-w-2xl">
+    <h1 class="text-3xl font-bold text-center text-gray-800 mb-8">Crear Sala</h1>
+
+    <mat-stepper [linear]="true" #stepper>
+      <!-- Topic Selection Step -->
+      <mat-step [completed]="selectedTopic() !== null" [editable]="true">
+        <ng-template matStepLabel>Seleccionar Tema</ng-template>
+        <div class="py-4">
+          <h2 class="text-xl font-semibold mb-4 text-gray-700">Elige un tema para tu juego</h2>
+          <app-topic-selector 
+            (topicSelect)="handleTopicSelect($event)" 
+            [topics]="topics()"
+            class="block">
+          </app-topic-selector>
+        </div>
+      </mat-step>
+
+      <!-- Difficulty Selection Step -->
+      <mat-step [completed]="currentStep() === creationStep.CREATING" [editable]="true">
+        <ng-template matStepLabel>Seleccionar Dificultad</ng-template>
+        <div class="py-4">
+          <h2 class="text-xl font-semibold mb-4 text-gray-700">Elige el nivel de dificultad</h2>
+          <app-difficulty-selector 
+            (difficultySelect)="handleDifficultySelect($event)"
+            class="block mb-6">
+          </app-difficulty-selector>
+
+          <div class="flex justify-start">
+            <button 
+              mat-button
+              (click)="handleGoBackToTopics()"
+              color="primary">
+              <mat-icon class="mr-2">arrow_back</mat-icon>
+              Volver
+            </button>
+          </div>
+        </div>
+      </mat-step>
+
+      <!-- Creating Room Step -->
+      <mat-step [editable]="false">
+        <ng-template matStepLabel>Creando Sala</ng-template>
+        <div class="py-8 flex flex-col items-center justify-center space-y-4">
+          <mat-progress-spinner 
+            diameter="48" 
+            mode="indeterminate"
+            color="primary">
+          </mat-progress-spinner>
+          <span class="text-lg text-gray-700 animate-pulse">Creando sala de juego...</span>
+        </div>
+      </mat-step>
+    </mat-stepper>
+  </div>
 </div>

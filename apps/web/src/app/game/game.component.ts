@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { MatButton } from '@angular/material/button';
 import { Router } from '@angular/router';
 
@@ -9,11 +9,13 @@ import { Router } from '@angular/router';
   styleUrl: './game.component.scss',
 })
 export class GameComponent {
-  constructor(private router: Router) {}
-  handleCreate(): void {
-    this.router.navigate(['/game/create']);
+  router = inject(Router);
+
+  public async handleCreate(): Promise<void> {
+    await this.router.navigate(['/game/create']);
   }
-  handleJoin(): void {
-    this.router.navigate(['/game/join']);
+
+  public async handleJoin(): Promise<void> {
+    await this.router.navigate(['/game/join']);
   }
 }

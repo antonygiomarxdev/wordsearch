@@ -1,6 +1,6 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import * as types from '../../types/types';
+import { Cell } from '@wordsearch/types';
 
 @Component({
   selector: 'app-game-cell',
@@ -14,34 +14,59 @@ import * as types from '../../types/types';
       (mouseenter)="onSelectEnter()"
       (touchstart)="onSelectStart()"
       (touchend)="onSelectEnd()"
-      [ngStyle]="backgroundStyle"
+      [ngStyle]="backgroundStyle()"
     >
-      <span class="text-lg font-bold">{{ cell.letter }}</span>
+      <span class="text-lg font-bold">{{ cell()?.letter }}</span>
     </div>
   `,
 })
 export class GameCellComponent {
-  @Input() cell!: types.Cell;
-  @Input() isSelected: boolean = false;
-  @Output() selectStart = new EventEmitter<[number, number]>();
-  @Output() selectEnter = new EventEmitter<[number, number]>();
-  @Output() selectEnd = new EventEmitter<void>();
+  cell = input<Cell | null | undefined>(null);
 
-  get backgroundStyle(): { [key: string]: string } {
-    if (this.isSelected) {
-      return { backgroundColor: '#bfdbfe' };
-    } else if (this.cell.foundBy) {
-      return { backgroundColor: '#a0aec0' };
-    }
-    return { backgroundColor: '#ffffff' };
-  }
+  selectStart = output<[number, number]>();
+  selectEnter = output<[number, number]>();
+  selectEnd = output<void>();
+
+  backgroundStyle = () => ({
+    backgroundColor: this.cell()?.foundBy ? '#a0aec0' : '#ffffff',
+  });
 
   onSelectStart(): void {
-    this.selectStart.emit([this.cell.x, this.cell.y]);
+    const cellValue = this.cell();
+    if (!cellValue) {
+      console.log('GameCellComponent.onSelectStart: cell is null');
+      return;
+    }
+
+    const x = cellValue.x ?? -1;
+    const y = cellValue.y ?? -1;
+
+    if (x < 0 || y < 0) {
+      console.log('GameCellComponent.onSelectStart: invalid cell coordinates');
+      return;
+    }
+
+    this.selectStart.emit([x, y]);
   }
+
   onSelectEnter(): void {
-    this.selectEnter.emit([this.cell.x, this.cell.y]);
+    const cellValue = this.cell();
+    if (!cellValue) {
+      console.log('GameCellComponent.onSelectEnter: cell is null');
+      return;
+    }
+
+    const x = cellValue.x ?? -1;
+    const y = cellValue.y ?? -1;
+
+    if (x < 0 || y < 0) {
+      console.log('GameCellComponent.onSelectEnter: invalid cell coordinates');
+      return;
+    }
+
+    this.selectEnter.emit([x, y]);
   }
+
   onSelectEnd(): void {
     this.selectEnd.emit();
   }
